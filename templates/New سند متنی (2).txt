@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Y2K Global Chat</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <style>
+        :root {
+            --bg-dark: #0a0a0c;
+            --bg-panel: #141418;
+            --crimson: #dc143c;
+            --crimson-dark: #8b001d;
+            --text-light: #f0f0f0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Vazirmatn', sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-light); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        /* هدر و پروفایل */
+        header { background: var(--bg-panel); border-bottom: 2px solid var(--crimson); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 900; color: var(--crimson); letter-spacing: 2px; }
+        .profile-bar { display: flex; align-items: center; gap: 12px; }
+        .avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--crimson); display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid #fff; }
+        .btn { background: var(--crimson); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; transition: 0.2s; }
+        .btn:hover { background: var(--crimson-dark); }
+        .btn-outline { background: transparent; border: 1px solid var(--crimson); }
+
+        /* بخش چت */
+        #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .msg-card { background: var(--bg-panel); border-right: 4px solid var(--crimson); padding: 10px 14px; border-radius: 10px; max-width: 75%; position: relative; }
+        
+        /* استایل رنگین‌کمانی مخصوص کاربران پریمیوم */
+        .msg-premium {
+            background: linear-gradient(135deg, #ff0055, #ff7700, #00bfff, #7700ff);
+            background-size: 200% 200%;
+            animation: rainbow 4s ease infinite;
+            border-right: none;
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(220, 20, 60, 0.4);
+        }
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .msg-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; font-size: 0.85rem; font-weight: bold; }
+        .star-badge { color: #00d9ff; font-size: 1rem; filter: drop-shadow(0 0 4px #0088ff); margin-right: 4px; }
+        .report-btn { background: rgba(0,0,0,0.4); color: #ffcccc; border: none; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+
+        /* بخش ارسال پیام و ایموجی */
+        .bottom-area { background: var(--bg-panel); border-top: 1px solid #2a2a30; padding: 10px 20px; }
+        .emoji-bar { display: flex; gap: 10px; margin-bottom: 8px; font-size: 1.2rem; cursor: pointer; user-select: none; }
+        .input-group { display: flex; gap: 10px; }
+        input[type="text"], textarea { flex: 1; background: #0a0a0c; border: 1px solid var(--crimson); color: #fff; padding: 10px; border-radius: 8px; outline: none; }
+
+        /* پنجره‌های پاپ‌آپ (ثبت‌نام، پریمیوم، پشتیبانی) */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: var(--bg-panel); border: 2px solid var(--crimson); padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center; display: flex; flex-direction: column; gap: 15px; }
+        .hidden { display: none !important; }
+        .plan-btn { background: #1f1f26; border: 1px solid var(--crimson); color: #fff; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .plan-btn:hover { background: var(--crimson); }
+    </style>
+</head>
+<body>
+
+    <!-- پنجره ورود نام کاربری -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h2 style="color: var(--crimson);">ورود به Y2K</h2>
+            <p>یک نام کاربری برای حضور در چت جهانی انتخاب کنید:</p>
+            <input type="text" id="username-input" placeholder="مثلاً: Ali_Y2K">
+            <button class="btn" onclick="registerUser()">ورود به چت‌روم</button>
+        </div>
+    </div>
+
+    <!-- پنجره خرید پریمیوم -->
+    <div id="premium-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>🌟 اشتراک ویژه Y2K</h3>
+            <p style="font-size: 0.85rem;">امکانات: نشان تیک آبی ستاره‌ای 💠 + پس‌زمینه پیام رنگین‌کمانی</p>
+            <button class="plan-btn" onclick="buyPremium(1, 'https://your-payment-link-1.com')">اشتراک ۱ ماهه</button>
+            <button class="plan-btn" onclick="buyPremium(2, 'https://your-payment-link-2.com')">اشتراک ۲ ماهه</button>
+            <button class="plan-btn" onclick="buyPremium(3, 'https://your-payment-link-3.com')">اشتراک ۳ ماهه</button>
+            <button class="btn btn-outline" onclick="toggleModal('premium-modal')">بستن</button>
+        </div>
+    </div>
+
+    <!-- پنجره پشتیبانی آنلاین -->
+    <div id="support-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>🎧 ارتباط با پشتیبانی</h3>
+            <textarea id="support-text" rows="4" placeholder="پیام خود را بنویسید... پاسخ مدیر در چت نمایش داده می‌شود."></textarea>
+            <button class="btn" onclick="sendSupport()">ارسال پیام</button>
+            <button class="btn btn-outline" onclick="toggleModal('support-modal')">بستن</button>
+        </div>
+    </div>
+
+    <!-- هدر برنامه -->
+    <header>
+        <div class="logo">Y2K CHAT</div>
+        <div class="profile-bar">
+            <div class="avatar" id="user-avatar">U</div>
+            <div>
+                <div id="display-name" style="font-weight: bold;">کاربر</div>
+                <div id="premium-status" style="font-size: 0.75rem; color: #aaa;">کاربر عادی</div>
+            </div>
+            <button class="btn" onclick="toggleModal('premium-modal')">🌟 پریمیوم</button>
+            <button class="btn btn-outline" onclick="toggleModal('support-modal')">🎧 پشتیبانی</button>
+        </div>
+    </header>
+
+    <!-- محیط چت جهانی -->
+    <div id="chat-box"></div>
+
+    <!-- کادر ارسال پیام -->
+    <div class="bottom-area">
+        <div class="emoji-bar">
+            <span onclick="addEmoji('😀')">😀</span>
+            <span onclick="addEmoji('😂')">😂</span>
+            <span onclick="addEmoji('❤️')">❤️</span>
+            <span onclick="addEmoji('🔥')">🔥</span>
+            <span onclick="addEmoji('🎉')">🎉</span>
+            <span onclick="addEmoji('👍')">👍</span>
+        </div>
+        <div class="input-group">
+            <input type="text" id="msg-input" placeholder="پیام خود را بنویسید..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button class="btn" onclick="sendMessage()">ارسال</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = "";
+
+        function registerUser() {
+            const val = document.getElementById('username-input').value.trim();
+            if (!val) return alert("لطفاً یک نام کاربری وارد کنید!");
+            currentUser = val;
+            document.getElementById('display-name').innerText = currentUser;
+            document.getElementById('user-avatar').innerText = currentUser[0].toUpperCase();
+            document.getElementById('login-modal').classList.add('hidden');
+            fetchMessages();
+        }
+
+        function toggleModal(id) {
+            document.getElementById(id).classList.toggle('hidden');
+        }
+
+        function addEmoji(emoji) {
+            document.getElementById('msg-input').value += emoji;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const res = await fetch('/api/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, text: text})
+            });
+            const data = await res.json();
+            if (res.status === 403) {
+                alert(data.message);
+            } else {
+                input.value = "";
+                fetchMessages();
+            }
+        }
+
+        async function fetchMessages() {
+            if (!currentUser) return;
+            const res = await fetch('/api/messages');
+            const msgs = await res.json();
+            const box = document.getElementById('chat-box');
+            box.innerHTML = "";
+
+            msgs.forEach(m => {
+                if (m.username === currentUser && m.is_premium) {
+                    document.getElementById('premium-status').innerHTML = "اشتراک ویژه 💠";
+                    document.getElementById('premium-status').style.color = "#00d9ff";
+                }
+                const div = document.createElement('div');
+                div.className = "msg-card " + (m.is_premium ? "msg-premium" : "");
+                const badge = m.is_premium ? `<span class="star-badge" title="کاربر پریمیوم">✦☑️</span>` : "";
+                div.innerHTML = `
+                    <div class="msg-header">
+                        <span>${m.username} ${badge}</span>
+                        <button class="report-btn" onclick="reportMsg(${m.id})">🚨 گزارش</button>
+                    </div>
+                    <div>${m.text}</div>
+                `;
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        }
+
+        async function reportMsg(id) {
+            await fetch('/api/report', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({msg_id: id})
+            });
+            alert("گزارش تخلف برای مدیر در تلگرام ارسال شد.");
+        }
+
+        async function buyPremium(plan, paymentUrl) {
+            await fetch('/api/request_premium', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, plan: plan})
+            });
+            window.open(paymentUrl, '_blank');
+            alert("درخواست شما برای مدیر ارسال شد. پس از پرداخت، تیک آبی شما توسط مدیر فعال می‌شود.");
+            toggleModal('premium-modal');
+        }
+
+        async function sendSupport() {
+            const txt = document.getElementById('support-text').value.trim();
+            if (!txt) return;
+            await fetch('/api/support/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: currentUser, text: txt})
+            });
+            document.getElementById('support-text').value = "";
+            alert("پیام شما به تلگرام مدیر ارسال شد!");
+            toggleModal('support-modal');
+        }
+
+        setInterval(fetchMessages, 2000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+import threading
+from flask import Flask, render_template, request, jsonify
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# 🔑 تنظیمات تلگرام (اطلاعات خودت را اینجا بگذار)
+BOT_TOKEN = "8737024613:AAFcOBTcHaq8BVbJqnaFWPBIZhTwJeYFvug"
+ADMIN_ID = "1707952451"  # به صورت متن داخل گیومه بماند
+
+bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
+
+# 🗄️ حافظه موقت برای ذخیره داده‌ها
+messages = []        # لیست پیام‌های چت عمومی
+users = {}           # وضعیت کاربران: {username: {"is_premium": False, "banned": False}}
+support_tickets = {} # پیام‌های پشتیبانی: {ticket_id: username}
+ticket_counter = 1
+
+# --- روت‌های وب‌اپلیکیشن (Flask) ---
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/api/messages', methods=['GET'])
+def get_messages():
+    """ارسال تمام پیام‌های چت به سمت سایت"""
+    return jsonify(messages)
+
+@app.route('/api/send', methods=['POST'])
+def send_message():
+    """دریافت پیام جدید از کاربر در چت‌روم"""
+    data = request.json
+    username = data.get('username', '').strip()
+    text = data.get('text', '').strip()
+
+    if not username or not text:
+        return jsonify({"status": "error", "message": "اطلاعات ناقص است"}), 400
+
+    # بررسی ثبت‌نام یا وضعیت کاربر
+    if username not in users:
+        users[username] = {"is_premium": False, "banned": False}
+
+    if users[username]["banned"]:
+        return jsonify({"status": "error", "message": "حساب شما مسدود است!"}), 403
+
+    msg_id = len(messages) + 1
+    new_msg = {
+        "id": msg_id,
+        "username": username,
+        "text": text,
+        "is_premium": users[username]["is_premium"]
+    }
+    messages.append(new_msg)
+    return jsonify({"status": "success", "message": new_msg})
+
+@app.route('/api/report', methods=['POST'])
+def report_message():
+    """گزارش تخلف یک پیام به ربات تلگرام مدیر"""
+    data = request.json
+    msg_id = data.get('msg_id')
+    
+    # پیدا کردن پیام
+    target = next((m for m in messages if m["id"] == msg_id), None)
+    if not target:
+        return jsonify({"status": "error", "message": "پیام پیدا نشد"}), 404
+
+    # ارسال دکمه‌های کنترلی به ربات تلگرام مدیر
+    markup = InlineKeyboardMarkup()
+    btn_del = InlineKeyboardButton("🗑️ حذف پیام", callback_data=f"del_{msg_id}")
+    btn_ban = InlineKeyboardButton(f"🚫 مسدودسازی {target['username']}", callback_data=f"ban_{target['username']}")
+    markup.add(btn_del, btn_ban)
+
+    report_text = f"🚨 **گزارش تخلف جدید**\n\n👤 کاربر: @{target['username']}\n💬 پیام: {target['text']}\n🆔 شناسه پیام: {msg_id}"
+    bot.send_message(ADMIN_ID, report_text, reply_markup=markup, parse_mode="Markdown")
+    return jsonify({"status": "success"})
+
+@app.route('/api/request_premium', methods=['POST'])
+def request_premium():
+    """اعلام درخواست خرید پریمیوم به تلگرام مدیر"""
+    data = request.json
+    username = data.get('username')
+    plan = data.get('plan')
+
+    markup = InlineKeyboardMarkup()
+    btn_approve = InlineKeyboardButton("✅ تایید و فعال‌سازی تیک آبی", callback_data=f"prem_{username}")
+    markup.add(btn_approve)
+
+    text = f"⭐ **درخواست خرید پریمیوم**\n\n👤 کاربر: @{username}\n📦 پلن انتخابی: {plan} ماهه\n\nپس از تایید واریزی، دکمه زیر را لمس کنید:"
+    bot.send_message(ADMIN_ID, text, reply_markup=markup, parse_mode="Markdown")
+    return jsonify({"status": "success"})
+
+@app.route('/api/support/send', methods=['POST'])
+def send_support():
+    """ارسال تیکت پشتیبانی به تلگرام مدیر"""
+    global ticket_counter
+    data = request.json
+    username = data.get('username')
+    text = data.get('text')
+
+    ticket_id = ticket_counter
+    support_tickets[ticket_id] = username
+    ticket_counter += 1
+
+    msg = f"📩 **پیام پشتیبانی جدید (#{ticket_id})**\n\n👤 از طرف: @{username}\n💬 متن: {text}\n\nبرای پاسخ، از دستور زیر استفاده کنید:\n`/reply {ticket_id} متن پاسخ شما`"
+    bot.send_message(ADMIN_ID, msg, parse_mode="Markdown")
+    return jsonify({"status": "success"})
+
+# --- کنترلر دکمه‌ها و دستورات در ربات تلگرام (Telebot) ---
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callbacks(call):
+    data = call.data
+    
+    if data.startswith("del_"):
+        msg_id = int(data.split("_")[1])
+        # حذف پیام از لیست
+        global messages
+        messages = [m for m in messages if m["id"] != msg_id]
+        bot.answer_callback_query(call.id, "پیام با موفقیت حذف شد.")
+        bot.edit_message_text(f"✅ پیام شماره {msg_id} حذف شد.", chat_id=call.message.chat.id, message_id=call.message.message_id)
+
+    elif data.startswith("ban_"):
+        target_user = data.split("_")[1]
+        if target_user in users:
+            users[target_user]["banned"] = True
+        bot.answer_callback_query(call.id, f"کاربر {target_user} مسدود شد.")
+        bot.edit_message_text(f"🚫 دسترسی کاربر @{target_user} قطع شد.", chat_id=call.message.chat.id, message_id=call.message.message_id)
+
+    elif data.startswith("prem_"):
+        target_user = data.split("_")[1]
+        if target_user not in users:
+            users[target_user] = {"is_premium": True, "banned": False}
+        else:
+            users[target_user]["is_premium"] = True
+        
+        # بروزرسانی پیام‌های قبلی کاربر به حالت پریمیوم
+        for m in messages:
+            if m["username"] == target_user:
+                m["is_premium"] = True
+
+        bot.answer_callback_query(call.id, "اشتراک فعال شد!")
+        bot.edit_message_text(f"🌟 اشتراک پریمیوم و تیک آبی برای @{target_user} با موفقیت فعال شد.", chat_id=call.message.chat.id, message_id=call.message.message_id)
+
+@bot.message_handler(commands=['reply'])
+def reply_support(message):
+    """پاسخ مدیر به تیکت پشتیبانی: /reply [ticket_id] [text]"""
+    try:
+        parts = message.text.split(' ', 2)
+        ticket_id = int(parts[1])
+        reply_content = parts[2]
+        
+        target_username = support_tickets.get(ticket_id)
+        if target_username:
+            # ارسال پاسخ به عنوان یک پیام سیستمی به کاربر در چت‌روم
+            messages.append({
+                "id": len(messages) + 1,
+                "username": "🛡️ پشتیبانی Y2K",
+                "text": f"@{target_username} پاسخ شما: {reply_content}",
+                "is_premium": True
+            })
+            bot.reply_to(message, "✅ پاسخ شما در چت برای کاربر ارسال شد.")
+        else:
+            bot.reply_to(message, "❌ تیکت یافت نشد.")
+    except Exception:
+        bot.reply_to(message, "⚠️ فرمت اشتباه است. الگو:\n`/reply 1 پاسخ مورد نظر`")
+
+# --- اجرای هم‌زمان ربات تلگرام و سرور وب ---
+def run_telebot():
+    bot.infinity_polling()
+
+if __name__ == '__main__':
+    # اجرای ربات در پس‌زمینه
+    t = threading.Thread(target=run_telebot, daemon=True)
+    t.start()
+    
+    # اجرای سرور چت روی پورت 5000
+    print("🚀 سرور Y2K با موفقیت روشن شد!")
+    app.run(host='0.0.0.0', port=5000, debug=False)
